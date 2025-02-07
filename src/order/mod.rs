@@ -32,7 +32,7 @@ pub enum OrderStatus {
 /// by the Limit node. 
 #[derive(Serialize,Deserialize)]
 pub struct Order {
-    pub seqeunce: i32,         // Unique number for identification
+    pub id: String,         // Unique number for identification
     pub order_type: OrderType, // Order type enum
     pub price: f64,            // Limit price of the Order
     pub shares: AtomicU32,     // This field is Atomic because on concurrent
@@ -53,7 +53,7 @@ pub struct Order {
 impl Clone for Order {
     fn clone(&self) -> Order {
         Order {
-            seqeunce: self.seqeunce,
+            id: self.id.clone(),
             order_type: self.order_type,
             price: self.price,
             shares: AtomicU32::new(self.shares.load(SeqCst)),
@@ -69,8 +69,8 @@ impl Debug for Order {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Order:seq;{:?} type:{:?}, price:{:?},shares:{:?}, entry_time:{:?} , status:{:?}",
-            self.seqeunce,
+            "Order:id;{:?} type:{:?}, price:{:?},shares:{:?}, entry_time:{:?} , status:{:?}",
+            self.id,
             self.order_type,
             self.price,
             self.shares,
@@ -81,9 +81,9 @@ impl Debug for Order {
 }
 
 impl Order {
-    pub fn new(seq: i32, order_type: OrderType, price: f64, shares: u32) -> Order {
+    pub fn new(id: String, order_type: OrderType, price: f64, shares: u32) -> Order {
         Order {
-            seqeunce: seq,
+            id,
             order_type,
             price,
             shares: AtomicU32::new(shares),
