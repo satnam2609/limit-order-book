@@ -19,7 +19,7 @@ use dashmap::DashMap;
 #[derive(Debug, Clone,Serialize,Deserialize)]
 pub enum LOBResponse {
     Inserted(String),
-    Executed(String,u32,OrderStatus),
+    Executed(String,f64,u32,OrderStatus),
     Cancelled(Box<Order>),
 }
 
@@ -224,7 +224,7 @@ impl LimitOrderBook {
             let ord = unsafe { Box::from_raw(tuple.1.load(Acquire)) };
             return match *status {
                 OrderStatus::CANCEL => Ok(LOBResponse::Cancelled(ord)),
-                OrderStatus::FULL => Ok(LOBResponse::Executed(id,shares,OrderStatus::FULL)),
+                OrderStatus::FULL => Ok(LOBResponse::Executed(ord.id,ord.price,shares,OrderStatus::FULL)),
                 _ => Err(LOBError::MatchingEngineError),
             };
         }
