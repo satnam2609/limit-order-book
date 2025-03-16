@@ -45,6 +45,7 @@ impl Limit {
     /// This method insertes new [`Order`] atomically.
     pub fn insert(&self, order: *mut Order) {
         self.size.fetch_add(1, SeqCst);
+        
         loop {
             let current_tail = self.tail.load(Acquire);
 
@@ -66,6 +67,10 @@ impl Limit {
                 }
             }
         }
+    }
+
+    pub fn level(&self)->u32{
+        self.volume.load(SeqCst)
     }
 
     pub fn pop(&self) {
