@@ -255,20 +255,98 @@ impl LimitOrderBook {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossbeam::scope;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
-    fn test_insertions() {
-        let lob = LimitOrderBook::new(1001);
+    fn concurrent_insertions() {
+        let lob = Arc::new(LimitOrderBook::new(1));
+        let num_threads = 10;
+        let orders_per_thread = 100_000;
+        
+        scope(|s| {
+            for i in 0..num_threads {
+                let lob = Arc::clone(&lob);
+                s.spawn(move |_| {
+                    for j in 0..orders_per_thread {
+                        let _ = lob.insert_order(
+                            format!("order_{}_{}", i, j),
+                            (j % 100) as f64,
+                            10,
+                            OrderType::BID,
+                        );
+                    }
+                });
+            }
+        })
+        .unwrap();
+        
+        let total_orders = num_threads * orders_per_thread;
+        assert_eq!(lob.omap.len(), total_orders);
+    }
 
-        let res = lob.insert_order(String::from("satnam"), 100.10, 10, OrderType::BID);
-        assert!(res.is_ok());
-        let res = lob.insert_order(String::from("nishant"), 100.10, 10, OrderType::BID);
-        assert!(res.is_ok());
-
-        if let Some(limit) = lob.bmap.as_ref().get(&OrderedFloat(100.10)) {
-            let l = unsafe { limit.value().load(Acquire).as_ref().unwrap() };
-            let vol = l.volume.load(Acquire);
-            assert_eq!(vol, 20);
-        };
+    #[test]
+    fn concurrent_removals() {
+        let lob = Arc::new(LimitOrderBook::new(1));
+        let num_threads = 10;
+        let orders_per_thread = 100_000;
+        let mut status = OrderStatus::CANCEL;
+        
+        // Insert orders first
+        for i in 0..num_threads {
+            for j in 0..orders_per_thread {
+                let _ = lob.insert_order(
+                    format!("order_{}_{}", i, j),
+                    (j % 100) as f64,
+                    10,
+                    OrderType::BID,
+                );
+            }
+        }
+        
+        scope(|s| {
+            for i in 0..num_threads {
+                let lob = Arc::clone(&lob);
+                s.spawn(move |_| {
+                    for j in 0..orders_per_thread {
+                        let _ = lob.remove_order(
+                            format!("order_{}_{}", i, j),
+                            (j % 100) as f64,
+                            10,
+                            &mut status,
+                        );
+                    }
+                });
+            }
+        })
+        .unwrap();
+        
+        assert_eq!(lob.omap.len(), 0);
+    }
+    
+    #[test]
+    fn million_order_stress_test() {
+        let lob = Arc::new(LimitOrderBook::new(1));
+        let total_orders = 1_000_000;
+        let counter = Arc::new(AtomicUsize::new(0));
+        
+        scope(|s| {
+            for i in 0..4 {
+                let lob = Arc::clone(&lob);
+                let counter = Arc::clone(&counter);
+                s.spawn(move |_| {
+                    for j in 0..total_orders / 4 {
+                        let id = format!("order_{}_{}", i, j);
+                        if lob.insert_order(id.clone(), (j % 100) as f64, 10, OrderType::BID).is_ok() {
+                            counter.fetch_add(1, Ordering::SeqCst);
+                        }
+                    }
+                });
+            }
+        })
+        .unwrap();
+        
+        assert_eq!(counter.load(Ordering::SeqCst), total_orders);
     }
 }
